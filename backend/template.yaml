@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SmartDine - Full restaurant booking platform (Delhi)
+
+Parameters:
+  SenderEmail:
+    Type: String
+    Description: SES-verified sender email address
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, prod]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+
+Resources:
+
+  # ── lf4 deployed FIRST ────────────────────────────────────────────────────────
+
+  LF4NotifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: smartdine-lf4-notify
+      CodeUri: lambdas/
+      Handler: lf4_notify.lambda_handler
+      Role: arn:aws:iam::139337686878:role/smartdine-lambda-role
+      Description: Send SES email + Fast2SMS to customer and restaurant
+      Timeout: 60
+      Environment:
+        Variables:
+          AWS_REGION_NAME: ap-south-1
+          BOOKINGS_TABLE: smartdine-bookings
+          FAVOURITES_TABLE: smartdine-favourites
+          SENDER_EMAIL: !Ref SenderEmail
+
+  LF3BookingFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: LF4NotifyFunction
+    Properties:
+      FunctionName: smartdine-lf3-booking
+      CodeUri: lambdas/
+      Handler: lf3_booking.lambda_handler
+      Role: arn:aws:iam::139337686878:role/smartdine-lambda-role
+      Description: Handle table booking requests from API Gateway
+      Environment:
+        Variables:
+          AWS_REGION_NAME: ap-south-1
+          BOOKINGS_TABLE: smartdine-bookings
+          FAVOURITES_TABLE: smartdine-favourites
+          NOTIFY_LAMBDA_NAME: smartdine-lf4-notify
+          SENDER_EMAIL: !Ref SenderEmail
+      Events:
+        BookingPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SmartDineApi
+            Path: /booking
+            Method: POST
+        BookingOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SmartDineApi
+            Path: /booking
+            Method: OPTIONS
+
+  LF5RecurringFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: LF4NotifyFunction
+    Properties:
+      FunctionName: smartdine-lf5-recurring
+      CodeUri: lambdas/
+      Handler: lf5_recurring.lambda_handler
+      Role: arn:aws:iam::139337686878:role/smartdine-lambda-role
+      Description: Weekly auto-booking job from favourites
+      Timeout: 120
+      Environment:
+        Variables:
+          AWS_REGION_NAME: ap-south-1
+          BOOKINGS_TABLE: smartdine-bookings
+          FAVOURITES_TABLE: smartdine-favourites
+          NOTIFY_LAMBDA_NAME: smartdine-lf4-notify
+          SENDER_EMAIL: !Ref SenderEmail
+      Events:
+        WeeklyTrigger:
+          Type: Schedule
+          Properties:
+            Schedule: cron(30 2 ? * MON *)
+            Name: smartdine-weekly-booking
+            Description: Auto-create bookings from favourites every Monday 8AM IST
+            Enabled: true
+
+  # ── API Gateway ───────────────────────────────────────────────────────────────
+
+  SmartDineApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: smartdine-api
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+# ── Outputs ────────────────────────────────────────────────────────────────────
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway base URL — set as VITE_API_ENDPOINT in frontend .env.local
+    Value: !Sub 'https://${SmartDineApi}.execute-api.ap-south-1.amazonaws.com/${Environment}'
+    Export:
+      Name: SmartDineApiEndpoint

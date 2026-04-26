@@ -271,12 +271,6 @@ Measured from a residential broadband connection in Delhi NCR (Lambda + DynamoDB
 
 ---
 
-## 📄 License
-
-This project is released for educational and demonstration purposes. See the repository for details.
-
----
-
 ## 🙏 Acknowledgements
 
 - **Amazon Web Services** — for the serverless platform and free-tier quotas that made this project possible
@@ -288,5 +282,3 @@ This project is released for educational and demonstration purposes. See the rep
 ## 👤 Author
 
 **Vishal Sharma** — [@Vishalsym](https://github.com/Vishalsym)
-
-Built as an MCA project at CHRIST (Deemed to be University), Delhi NCR Campus, 2026.
